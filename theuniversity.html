@@ -196,6 +196,11 @@ label,.lb{display:block;font-size:.78rem;color:var(--mute);margin-bottom:3px}
     <button type="button" id="expPdf"><svg class="i" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 14h6M9 17h4"/></svg>تصدير PDF</button>
     <button type="button" id="expImg"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>تصدير صورة</button>
   </div>
+  <div class="export">
+    <button type="button" id="bkp"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M4 20h16"/></svg>نسخة احتياطية</button>
+    <button type="button" id="rst"><svg class="i" viewBox="0 0 24 24"><path d="M12 20V9M7 13l5-5 5 5M4 4h16"/></svg>استعادة نسخة</button>
+  </div>
+  <input type="file" id="rstFile" accept=".json" hidden>
   <button type="button" class="link clear" id="clear">مسح السجل</button>
 </section>
 </main>
@@ -434,11 +439,12 @@ async function makeCanvas(){
   return html2canvas(node,{scale:2,backgroundColor:"#ffffff",logging:false,windowWidth:900,scrollX:0,scrollY:0,onclone:function(doc){var n=doc.getElementById("report");if(n){n.style.position="static";n.style.left="0"}}});
 }
 async function saveFile(name,blob){
-  var dl=null;
-  try{dl=window.claude&&window.claude.use?await window.claude.use("downloads"):null}catch(e){}
-  if(!dl){toast("التصدير غير متاح في هذا العرض");return}
-  try{await dl.save({filename:name,data:blob});toast("تم الحفظ")}
-  catch(e){if(e&&e.code==="declined")return;toast("تعذر حفظ الملف ("+((e&&e.code)||"خطأ")+")")}
+  try{
+    var url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url)},4000);
+    toast("تم التنزيل");
+  }catch(e){toast("تعذر حفظ الملف")}
 }
 async function exportAs(kind){
   var b1=$("expPdf"),b2=$("expImg");b1.disabled=b2.disabled=true;
@@ -497,6 +503,25 @@ $("clear").onclick=function(){
   var b=this;
   if(!clearArmed){clearArmed=true;b.textContent="اضغط مرة أخرى لتأكيد مسح كل العمليات";setTimeout(function(){clearArmed=false;b.textContent="مسح السجل"},4000);return}
   clearArmed=false;b.textContent="مسح السجل";var ids=data.items.map(function(x){return x.id});data.items=[];save();ids.forEach(rDel);render();toast("تم مسح السجل");
+};
+$("bkp").onclick=function(){saveFile("university-backup-"+today()+".json",new Blob([JSON.stringify({items:data.items,rate:RATE},null,2)],{type:"application/json"}))};
+$("rst").onclick=function(){$("rstFile").click()};
+$("rstFile").onchange=function(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      var d=JSON.parse(r.result),arr=Array.isArray(d)?d:d.items;
+      if(!Array.isArray(arr))throw new Error("bad");
+      data.items=arr.filter(function(x){return x&&x.a>=0}).map(function(x){
+        return {id:x.id||Date.now()+Math.random(),t:x.t==="trip"?"trip":"fee",d:x.d||today(),a:Number(x.a)||0,cat:x.cat||"",term:TERMS.indexOf(x.term)>=0?x.term:TERMS[0],y:String(x.y||(x.d||"").slice(0,4)||vy),n:x.n||""};
+      });
+      if(d&&d.rate>0)RATE=d.rate;
+      save();render();toast("تمت استعادة البيانات");
+    }catch(err){toast("ملف غير صالح")}
+    e.target.value="";
+  };
+  r.readAsText(f);
 };
 render();
 initRemote();

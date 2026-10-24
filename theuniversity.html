@@ -108,6 +108,17 @@ label,.lb{display:block;font-size:.78rem;color:var(--mute);margin-bottom:3px}
 #report .n{direction:ltr;text-align:left;font-variant-numeric:tabular-nums;white-space:nowrap}
 #report .tot td{font-weight:800;background:#f4ead7}
 #report h2{font-size:16px;margin:0 0 6px;color:#6b6762}
+.atot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.atc{display:flex;flex-direction:column;align-items:center;gap:1px;border-radius:14px;padding:9px 4px;text-align:center;min-width:0;background:var(--bg)}
+.atc.f{background:var(--fee-bg)}.atc.t{background:var(--trip-bg)}.atc.g{background:linear-gradient(135deg,#8c8478,#b49c74);color:#fff}
+.atc b{font-size:.92rem;direction:ltr;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.atc.f b{color:var(--fee)}.atc.t b{color:var(--trip)}
+.atc.g .tn,.atc.g .sar{color:#fff;opacity:.9}
+.yr{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px;align-items:center;width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 10px;margin-top:6px;text-align:center;font-size:.8rem}
+.yr.on{border-color:var(--accent)}
+.yr .y{font-weight:800;font-variant-numeric:tabular-nums}
+.yr span{direction:ltr;font-variant-numeric:tabular-nums}
+.yh{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px;font-size:.72rem;color:var(--mute);text-align:center;padding:0 10px}
 @media (max-width:420px){.banner .bt{max-width:80%}.tc b{font-size:.85rem}}
 </style>
 
@@ -148,9 +159,10 @@ label,.lb{display:block;font-size:.78rem;color:var(--mute);margin-bottom:3px}
 
 <div class="total"><span>إجمالي السنة</span><div><b id="grand">0</b><div class="sar" id="grandSar"></div></div></div>
 
-<section class="chart" aria-label="الرسم البياني">
-  <h3><span id="chartTitle">مقارنة الأترام</span><span class="lg"><span><i style="background:var(--fee-solid)"></i>رسوم</span><span><i style="background:var(--trip-solid)"></i>سفر</span></span></h3>
-  <div id="chartBox"></div>
+<section class="panel" aria-label="إجمالي كل السنوات">
+  <div class="ph"><span>إجمالي كل السنوات</span></div>
+  <div class="atot" id="allTot"></div>
+  <div id="yearRows"></div>
 </section>
 
 <div class="rate"><span class="sync" id="sync" data-s="local"><span id="syncTxt">محفوظ في هذا الجهاز فقط</span></span><span>1 د.أ = <input type="number" id="customRate" step="0.001" value="5.289" aria-label="سعر الصرف"> ر.س</span></div>
@@ -372,7 +384,7 @@ function render(){
   $("tripTot").textContent=fj(tot.trip);$("tripTotSar").textContent="≈ "+fs(tot.trip*RATE)+" ر.س";
   var g=tot.fee+tot.trip;
   $("grand").textContent=fj(g);$("grandSar").textContent="≈ "+fs(g*RATE)+" ر.س";
-  renderChart();
+  renderYears();
 
   Array.prototype.forEach.call($("typeChips").children,function(b){b.classList.toggle("on",b.dataset.f===fType)});
   Array.prototype.forEach.call($("termChips").children,function(b){b.classList.toggle("on",b.dataset.k===fTerm)});
@@ -395,6 +407,25 @@ function render(){
   });
 }
 
+function renderYears(){
+  var by={},tf=0,tt=0;
+  data.items.forEach(function(i){
+    var y=yOf(i);if(!y)return;
+    var o=by[y]||(by[y]={f:0,t:0});
+    if(i.t==="fee"){o.f+=i.a||0;tf+=i.a||0}else{o.t+=i.a||0;tt+=i.a||0}
+  });
+  var box=function(c,n,v){return '<div class="atc '+c+'"><span class="tn">'+n+'</span><b>'+fj(v)+'</b><span class="sar">≈ '+fs(v*RATE)+' ر.س</span></div>'};
+  $("allTot").innerHTML=box("f","رسوم الدراسة",tf)+box("t","مصاريف السفر",tt)+box("g","الإجمالي الكلي",tf+tt);
+  var ys=Object.keys(by).sort(function(a,b){return b-a}),h=$("yearRows");h.textContent="";
+  if(!ys.length){h.innerHTML='<div class="empty">لا توجد بيانات بعد</div>';return}
+  var hd=document.createElement("div");hd.className="yh";hd.innerHTML='<span>السنة</span><span>رسوم</span><span>سفر</span><span>الإجمالي</span>';h.appendChild(hd);
+  ys.forEach(function(y){
+    var o=by[y],b=document.createElement("button");b.type="button";b.className="yr"+(String(vy)===y?" on":"");
+    b.innerHTML='<span class="y">'+y+'</span><span>'+fj(o.f)+'</span><span>'+fj(o.t)+'</span><span><b>'+fj(o.f+o.t)+'</b></span>';
+    b.onclick=function(){vy=Number(y);$("year").value=y;render()};
+    h.appendChild(b);
+  });
+}
 function setType(t){
   type=t;
   $("bFee").classList.toggle("on",t==="fee");$("bTrip").classList.toggle("on",t==="trip");
@@ -421,13 +452,11 @@ function reportHtml(items){
   var cell=function(v){return '<td class="n">'+fj(v)+'<br><span style="color:#8a857c;font-size:11px">'+fs(v*RATE)+' ر.س</span></td>'};
   var sumRow=function(t){return '<tr><td><b>'+typeName(t)+'</b></td>'+keys.map(function(k){return cell(sums[t][k]||0)}).join("")+cell(tot[t])+'</tr>'};
   var g=tot.fee+tot.trip;
-  var sums2=termSums(rows);
   var flt=(fType==="all"?"الرسوم والسفر":typeName(fType))+" · "+(fTerm==="all"?"كل الفصول":termName(fTerm));
   var body=rows.map(function(i){return '<tr><td>'+esc(i.d)+'</td><td>'+typeName(i.t)+'</td><td>'+esc(i.cat||"")+'</td><td>'+esc(i.term||"-")+'</td><td class="n">'+fs(i.a)+'</td><td class="n">'+fs(i.a*RATE)+'</td><td>'+esc(i.n||"")+'</td></tr>'}).join("");
   return '<h1>سجل مصاريف الجامعة</h1><div class="sub">سنة '+vy+' · '+flt+' · سعر الصرف 1 د.أ = '+RATE+' ر.س · صدر في '+today()+'</div>'+
     '<h2>الملخص</h2><table><tr><th></th>'+keys.map(function(k){return '<th>'+termName(k)+'</th>'}).join("")+'<th>الإجمالي</th></tr>'+sumRow("fee")+sumRow("trip")+
     '<tr class="tot"><td>الإجمالي الكلي</td><td></td><td></td><td></td>'+cell(g)+'</tr></table>'+
-    '<h2>مقارنة الأترام (د.أ)</h2><div style="margin-bottom:6px;font-size:12px;color:#7a756c"><span style="display:inline-block;width:10px;height:10px;background:#5f5b56;border-radius:2px"></span> رسوم &nbsp;&nbsp; <span style="display:inline-block;width:10px;height:10px;background:#8a6d3b;border-radius:2px"></span> سفر</div><div style="margin-bottom:18px">'+chartSvg(sums2.fee,sums2.trip,{fee:"#5f5b56",trip:"#8a6d3b",grid:"#e8e1d3",mute:"#7a756c",ink:"#2f2d2a"},726)+'</div>'+
     '<h2>العمليات ('+rows.length+')</h2><table><tr><th>التاريخ</th><th>النوع</th><th>البند</th><th>الفصل</th><th>د.أ</th><th>ر.س</th><th>ملاحظة</th></tr>'+body+'</table>';
 }
 async function makeCanvas(){
